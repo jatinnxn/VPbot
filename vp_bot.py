@@ -587,13 +587,24 @@ let hasShownWarmUp = false;
 const GREETING_WORDS = ["hi", "hello", "hey", "hie", "yo", "greetings"];
 
 const formatMessagePreservingLinks = (message) => {
+  // Convert markdown links [text](url) to anchors opening in a new tab
+  const mdLinkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+  if (mdLinkRegex.test(message)) {
+    const withAnchors = message.replace(
+      mdLinkRegex,
+      '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:#007bff;text-decoration:underline;">$1</a>'
+    );
+    return withAnchors.replace(/\n/g, "<br>");
+  }
+
+  // Fallback: auto-link plain URLs
   const linkRegex = /(https?:\/\/[^\s]+)/g;
   let segments = message.split(linkRegex);
 
   return segments
     .map((part) => {
       if (linkRegex.test(part)) {
-        return `<a href="${part}" target="_blank" style="color:#007bff;text-decoration:underline;">Click here</a>`;
+        return `<a href="${part}" target="_blank" rel="noopener noreferrer" style="color:#007bff;text-decoration:underline;">Click here</a>`;
       } else {
         return part.replace(/\n/g, "<br>");
       }
@@ -624,7 +635,7 @@ const addMessage = (message, type) => {
     options.forEach(opt => {
       const btn = document.createElement("button");
       btn.textContent = opt.label;
-      btn.onclick = () => window.location.href = opt.url;
+      btn.onclick = () => window.open(opt.url, "_blank");
       btn.style.margin = "5px 10px 5px 0";
       btn.style.padding = "10px 15px";
       btn.style.borderRadius = "8px";
@@ -739,7 +750,19 @@ closeBtn.onclick = () => document.body.classList.remove("show-chatbot");
 # =====================
 # FASTAPI APP
 # =====================
-app = FastAPI()
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup tasks
+    load_country_links()
+    load_country_aliases()
+    print("✅ VP Bot started successfully")
+    yield
+    # Shutdown tasks
+    print("👋 VP Bot shutting down...")
+
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -748,10 +771,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.on_event("startup")
-def startup_event():
-    load_country_links()
-    load_country_aliases()
 
 @app.get("/", response_class=HTMLResponse)
 def serve_index():
@@ -930,23 +949,12 @@ def chat_response(input: ChatInput):
     else:
         return {"session_id": session_id, "message": f"Sorry, I couldn't find a {session.get('doc_type','document')} link for {country.title()}."}
 
-# =====================
-# MAIN (run server)
-# =====================
 if __name__ == "__main__":
     import uvicorn, webbrowser, threading, time
-
     url = "http://localhost:8000"
-
-    # Open browser after short delay so server is ready
     def open_browser():
         time.sleep(1.5)
         webbrowser.open(url)
-
     threading.Thread(target=open_browser).start()
-
     print(f"🚀 VP Bot is running! Open {url} in your browser.")
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
-
-
