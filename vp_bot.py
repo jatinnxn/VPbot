@@ -750,19 +750,7 @@ closeBtn.onclick = () => document.body.classList.remove("show-chatbot");
 # =====================
 # FASTAPI APP
 # =====================
-from contextlib import asynccontextmanager
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup tasks
-    load_country_links()
-    load_country_aliases()
-    print("✅ VP Bot started successfully")
-    yield
-    # Shutdown tasks
-    print("👋 VP Bot shutting down...")
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -771,6 +759,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+def startup_event():
+    load_country_links()
+    load_country_aliases()
 
 @app.get("/", response_class=HTMLResponse)
 def serve_index():
